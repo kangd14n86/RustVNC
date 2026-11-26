@@ -72,8 +72,21 @@ jobs:
       - name: Grant Gradle permission
         run: chmod +x ./gradlew
 
+      - name: Show project info
+        run: |
+          echo "=== Root files ==="
+          ls -la
+          echo "=== settings.gradle ==="
+          cat settings.gradle* 2>/dev/null || true
+          echo "=== build.gradle (root) ==="
+          cat build.gradle* 2>/dev/null | head -60 || true
+          echo "=== app/build.gradle ==="
+          cat app/build.gradle* 2>/dev/null | head -120 || true
+          echo "=== gradle-wrapper.properties ==="
+          cat gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true
+
       - name: Build Rust libraries and APK
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --console=plain
 
       - name: Show APK output
         if: success()
