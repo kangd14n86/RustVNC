@@ -4,42 +4,123 @@ name: Build RustVNC APK
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    name: Build RustVNC Android APK
     runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
 
     steps:
-      - name: Checkout
+      # 1. Download source and all submodules
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      # 2. Setup Java
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
+      # 3. Setup Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+
+      # 4. Install Android SDK, NDK and CMake
+      - name: Install Android NDK and CMake
+        run: |
+          sdkmanager --install \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.2.12479018" \
+            "cmake;3.22.1"
+
+          echo "$ANDROID_SDK_ROOT/cmake/3.22.1/bin" >> "$GITHUB_PATH"
+
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      # 5. Verify Android tools
+      - name: Verify Build Environment
+        run: |
+          java -version
+          rustc --version || true
+          cmake --version
+          sdkmanager --list_installed
+          ls "$ANDROID_SDK_ROOT/ndk/27.2.12479018"
+
+      # 6. Setup Rust
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: >-
+            aarch64-linux-android,
+            armv7-linux-androideabi,
+            i686-linux-android,
+            x86_64-linux-android
 
+      # 7. Install cargo-ndk
       - name: Install cargo-ndk
-        run: cargo install cargo-ndk
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install NDK and CMake
         run: |
-          sdkmanager "ndk;27.2.12479018" "cmake;3.22.1"
+          cargo install cargo-ndk --locked
+          cargo ndk --version
 
-      - name: Build APK
+      # 8. Verify submodules
+      - name: Verify Submodules
+        run: |
+          git submodule status
+          test -f libjpeg-turbo/CMakeLists.txt
+          test -d noVNC
+
+      # 9. Build Debug APK
+      - name: Build RustVNC APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew --no-daemon --stacktrace assembleDebug
 
-      - name: Upload APK
+      # 10. Verify APK
+      - name: Verify APK
+        run: |
+          echo "Checking generated APK..."
+          find app/build/outputs/apk -name "*.apk" -type f
+
+          APK=$(find app/build/outputs/apk/debug -name "*.apk" -type f | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not generated!"
+            exit 1
+          fi
+
+          echo "APK successfully generated: $APK"
+          ls -lh "$APK"
+
+      # 11. Upload APK
+      - name: Upload RustVNC APK
         uses: actions/upload-artifact@v4
         with:
-          name: RustVNC-APK
+          name: RustVNC-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      # 12. Build summary
+      - name: Build Summary
+        if: success()
+        run: |
+          echo "## RustVNC APK Build Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "APK: RustVNC Debug" >> $GITHUB_STEP_SUMMARY
+          echo "ABI: ARM64, ARMv7, x86, x86_64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download APK from Actions Artifacts." >> $GITHUB_STEP_SUMMARY
