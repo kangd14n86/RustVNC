@@ -11,6 +11,7 @@ permissions:
 
 env:
   NDK_VERSION: "27.0.12077973"
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
 jobs:
   build:
@@ -28,6 +29,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Setup CMake 3.31
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.31.x'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
@@ -52,6 +58,8 @@ jobs:
           echo "sdk.dir=$SDK" > local.properties
           echo "=== NDK terpasang ==="
           ls "$SDK/ndk"
+          echo "=== CMake aktif ==="
+          cmake --version
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
